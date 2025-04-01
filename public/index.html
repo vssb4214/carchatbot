@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Automotive Maintenance Chatbot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9f9f9;
+      padding: 2rem;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      background: white;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      max-width: 400px;
+      width: 100%;
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    select, textarea, input, button {
+      width: 100%;
+      margin: 0.5rem 0;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+      border: none;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #responseBox {
+      margin-top: 1rem;
+      padding: 1rem;
+      border: 1px solid #007bff;
+      border-radius: 8px;
+      background-color: #e9f5ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Automotive Maintenance Bot</h1>
+
+    <input type="text" id="vin" placeholder="Enter VIN (optional)" />
+    <button onclick="decodeVin()">Decode VIN</button>
+
+    <select id="year">
+      <option value="">Select Year</option>
+      <script>
+        for (let y = 2025; y >= 1995; y--) {
+          document.write(`<option value="${y}">${y}</option>`);
+        }
+      </script>
+    </select>
+
+    <select id="make">
+      <option value="">Select Make</option>
+    </select>
+
+    <select id="model">
+      <option value="">Select Model</option>
+    </select>
+
+    <textarea id="problem" rows="4" placeholder="Describe your problem..."></textarea>
+
+    <button onclick="submitForm()">Submit</button>
+
+    <div id="responseBox"></div>
+  </div>
+
+  <script>
+    async function loadCarMakes() {
+      const res = await fetch("https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/car?format=json");
+      const data = await res.json();
+      const makeSelect = document.getElementById("make");
+
+      data.Results.forEach(make => {
+        const option = document.createElement("option");
+        option.value = make.MakeName;
+        option.textContent = make.MakeName;
+        makeSelect.appendChild(option);
+      });
+    }
+
+    async function loadModels(make) {
+      const modelSelect = document.getElementById("model");
+      modelSelect.innerHTML = '<option value="">Select Model</option>';
+
+      if (!make) return;
+
+      const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/getmodelsformake/${make}?format=json`);
+      const data = await res.json();
+
+      data.Results.forEach(model => {
+        const option = document.createElement("option");
+        option.value = model.Model_Name;
+        option.textContent = model.Model_Name;
+        modelSelect.appendChild(option);
+      });
+    }
+
+    async function decodeVin() {
+      const vin = document.getElementById("vin").value.trim();
+      if (!vin) return alert("Please enter a VIN to decode.");
+
+      try {
+        const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${vin}?format=json`);
+        const data = await res.json();
+        const result = data.Results[0];
+
+        const make = result.Make;
+        const model = result.Model;
+        const year = result.ModelYear;
+
+        if (make && model && year) {
+          document.getElementById("year").value = year;
+          document.getElementById("make").value = make;
+          await loadModels(make);
+          document.getElementById("model").value = model;
+        } else {
+          alert("Could not decode VIN into Year, Make, and Model.");
+        }
+      } catch (err) {
+        alert("Failed to decode VIN.");
+        console.error(err);
+      }
+    }
+
+    document.getElementById("make").addEventListener("change", function () {
+      loadModels(this.value);
+    });
+
+    async function submitForm() {
+      const year = document.getElementById('year').value;
+      const make = document.getElementById('make').value;
+      const model = document.getElementById('model').value;
+      const problem = document.getElementById('problem').value;
+
+      const userInput = `I have a ${year} ${make} ${model}. The problem is: ${problem}`;
+
+      try {
+        const response = await fetch('/api/respond', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: userInput })
+        });
+
+        const data = await response.json();
+        document.getElementById("responseBox").textContent = data.reply;
+      } catch (err) {
+        console.error(err);
+        document.getElementById("responseBox").textContent = "Error getting response from AI.";
+      }
+    }
+
+    window.onload = loadCarMakes;
+  </script>
+</body>
+</html>
