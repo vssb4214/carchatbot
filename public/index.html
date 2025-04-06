@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" ng-app="automotiveApp">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Automotive Maintenance Chatbot</title>
+  <title>Automotive Maintenance Bot</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -42,132 +42,188 @@
     button:hover {
       background-color: #0056b3;
     }
-    #responseBox {
+    /* Chat area styling */
+    #chatArea {
       margin-top: 1rem;
+    }
+    #chatHistory {
+      border: 1px solid #ccc;
       padding: 1rem;
-      border: 1px solid #007bff;
-      border-radius: 8px;
+      height: 300px;
+      overflow-y: auto;
+      margin-bottom: 1rem;
       background-color: #e9f5ff;
     }
+    .chat-message {
+      margin-bottom: 0.75rem;
+    }
+    .chat-message span {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 15px;
+    }
+    .chat-user {
+      text-align: right;
+    }
+    .chat-assistant {
+      text-align: left;
+    }
+    .chat-user span {
+      background: #007bff;
+      color: white;
+    }
+    .chat-assistant span {
+      background: #e9e9e9;
+      color: black;
+    }
   </style>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
 </head>
-<body>
+<body ng-controller="MainController">
   <div class="container">
     <h1>Automotive Maintenance Bot</h1>
+    
+    <!-- Car information section -->
+    <div id="carInfo" ng-show="!conversationStarted">
+      <input type="text" ng-model="vin" placeholder="Enter VIN (optional)" />
+      <button ng-click="decodeVin()">Decode VIN</button>
 
-    <input type="text" id="vin" placeholder="Enter VIN (optional)" />
-    <button onclick="decodeVin()">Decode VIN</button>
+      <select ng-model="year" ng-options="y for y in years">
+        <option value="">Select Year</option>
+      </select>
 
-    <select id="year">
-      <option value="">Select Year</option>
-      <script>
-        for (let y = 2025; y >= 1995; y--) {
-          document.write(`<option value="${y}">${y}</option>`);
-        }
-      </script>
-    </select>
+      <select ng-model="make" ng-change="loadModels()" ng-options="m.MakeName as m.MakeName for m in makes">
+        <option value="">Select Make</option>
+      </select>
 
-    <select id="make">
-      <option value="">Select Make</option>
-    </select>
+      <select ng-model="model" ng-options="model.Model_Name as model.Model_Name for model in models">
+        <option value="">Select Model</option>
+      </select>
 
-    <select id="model">
-      <option value="">Select Model</option>
-    </select>
+      <textarea ng-model="issue" rows="4" placeholder="Describe your problem..."></textarea>
+      <button ng-click="startConversation()">Start Conversation</button>
+    </div>
 
-    <textarea id="problem" rows="4" placeholder="Describe your problem..."></textarea>
-
-    <button onclick="submitForm()">Submit</button>
-
-    <div id="responseBox"></div>
+    <div id="chatArea" ng-show="conversationStarted">
+      <div id="chatHistory">
+        <div class="chat-message" ng-repeat="msg in conversation">
+          <div ng-class="{'chat-user': msg.role === 'user', 'chat-assistant': msg.role === 'assistant'}">
+            <span>{{msg.text}}</span>
+          </div>
+        </div>
+      </div>
+      <input type="text" ng-model="chatInput" placeholder="Type your message here" />
+      <button ng-click="sendChatMessage()">Send</button>
+    </div>
   </div>
 
   <script>
-    async function loadCarMakes() {
-      const res = await fetch("https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/car?format=json");
-      const data = await res.json();
-      const makeSelect = document.getElementById("make");
+    angular.module('automotiveApp', [])
+      .controller('MainController', ['$scope', '$http', function($scope, $http) {
+        // Initialize scope variables
+        $scope.conversationStarted = false;
+        $scope.conversation = [];
+        $scope.years = [];
+        $scope.makes = [];
+        $scope.models = [];
+        $scope.vin = "";
+        $scope.year = "";
+        $scope.make = "";
+        $scope.model = "";
+        $scope.issue = "";
+        $scope.chatInput = "";
 
-      data.Results.forEach(make => {
-        const option = document.createElement("option");
-        option.value = make.MakeName;
-        option.textContent = make.MakeName;
-        makeSelect.appendChild(option);
-      });
-    }
-
-    async function loadModels(make) {
-      const modelSelect = document.getElementById("model");
-      modelSelect.innerHTML = '<option value="">Select Model</option>';
-
-      if (!make) return;
-
-      const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/getmodelsformake/${make}?format=json`);
-      const data = await res.json();
-
-      data.Results.forEach(model => {
-        const option = document.createElement("option");
-        option.value = model.Model_Name;
-        option.textContent = model.Model_Name;
-        modelSelect.appendChild(option);
-      });
-    }
-
-    async function decodeVin() {
-      const vin = document.getElementById("vin").value.trim();
-      if (!vin) return alert("Please enter a VIN to decode.");
-
-      try {
-        const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${vin}?format=json`);
-        const data = await res.json();
-        const result = data.Results[0];
-
-        const make = result.Make;
-        const model = result.Model;
-        const year = result.ModelYear;
-
-        if (make && model && year) {
-          document.getElementById("year").value = year;
-          document.getElementById("make").value = make;
-          await loadModels(make);
-          document.getElementById("model").value = model;
-        } else {
-          alert("Could not decode VIN into Year, Make, and Model.");
+        // Populate years array from 2025 to 1995
+        for (let y = 2025; y >= 1995; y--) {
+          $scope.years.push(y);
         }
-      } catch (err) {
-        alert("Failed to decode VIN.");
-        console.error(err);
-      }
-    }
 
-    document.getElementById("make").addEventListener("change", function () {
-      loadModels(this.value);
-    });
+        // Load car makes from the NHTSA API
+        $scope.loadCarMakes = function() {
+          $http.get("https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/car?format=json")
+            .then(function(response) {
+              $scope.makes = response.data.Results;
+            }, function(error) {
+              console.error("Error loading makes:", error);
+            });
+        };
 
-    async function submitForm() {
-      const year = document.getElementById('year').value;
-      const make = document.getElementById('make').value;
-      const model = document.getElementById('model').value;
-      const problem = document.getElementById('problem').value;
+        // Load models for a given make from the NHTSA API
+        $scope.loadModels = function() {
+          $scope.models = [];
+          if (!$scope.make) return;
+          $http.get("https://vpic.nhtsa.dot.gov/api/vehicles/getmodelsformake/" + $scope.make + "?format=json")
+            .then(function(response) {
+              $scope.models = response.data.Results;
+            }, function(error) {
+              console.error("Error loading models:", error);
+            });
+        };
 
-      const userInput = `I have a ${year} ${make} ${model}. The problem is: ${problem}`;
+        // Decode VIN and auto-fill Year, Make, and Model using the NHTSA API
+        $scope.decodeVin = function() {
+          if (!$scope.vin) {
+            alert("Please enter a VIN to decode.");
+            return;
+          }
+          $http.get("https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/" + $scope.vin + "?format=json")
+            .then(function(response) {
+              const result = response.data.Results[0];
+              if (result.ModelYear) {
+                $scope.year = result.ModelYear;
+              }
+              if (result.Make) {
+                // Refresh makes list and auto-select the decoded make
+                $scope.loadCarMakes();
+                $scope.make = result.Make;
+                $scope.loadModels();
+                if (result.Model) {
+                  $scope.model = result.Model;
+                }
+              } else {
+                alert("Could not decode VIN into Year, Make, and Model.");
+              }
+            }, function(error) {
+              alert("Failed to decode VIN.");
+              console.error(error);
+            });
+        };
 
-      try {
-        const response = await fetch('/api/respond', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: userInput })
-        });
+        // Start the conversation: build the initial message from car info and issue.
+        $scope.startConversation = function() {
+          if (!$scope.year || !$scope.make || !$scope.model || !$scope.issue) {
+            alert("Please fill in all fields.");
+            return;
+          }
+          const initialMessage = "I have a " + $scope.year + " " + $scope.make + " " + $scope.model + ". The issue is: " + $scope.issue;
+          $scope.conversation.push({ role: 'user', text: initialMessage });
+          $scope.conversationStarted = true;
+          $scope.sendConversation();
+        };
 
-        const data = await response.json();
-        document.getElementById("responseBox").textContent = data.reply;
-      } catch (err) {
-        console.error(err);
-        document.getElementById("responseBox").textContent = "Error getting response from AI.";
-      }
-    }
+        // Send the conversation history to the server and process the assistant's reply.
+        $scope.sendConversation = function() {
+          $http.post('/api/chat', { conversation: $scope.conversation })
+            .then(function(response) {
+              const assistantReply = response.data.reply;
+              $scope.conversation.push({ role: 'assistant', text: assistantReply });
+            }, function(error) {
+              console.error("Error contacting assistant:", error);
+              $scope.conversation.push({ role: 'assistant', text: "Error contacting the assistant." });
+            });
+        };
 
-    window.onload = loadCarMakes;
+        // When the user sends a follow-up chat message
+        $scope.sendChatMessage = function() {
+          if (!$scope.chatInput) return;
+          $scope.conversation.push({ role: 'user', text: $scope.chatInput });
+          $scope.chatInput = "";
+          $scope.sendConversation();
+        };
+
+        // Initialize by loading car makes.
+        $scope.loadCarMakes();
+      }]);
   </script>
 </body>
 </html>

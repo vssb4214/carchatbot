@@ -1,28 +1,10 @@
 {
   "name": "carchatbot",
   "version": "1.0.0",
-  "main": "server.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/vssb4214/carchatbot.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/vssb4214/carchatbot/issues"
-  },
-  "homepage": "https://github.com/vssb4214/carchatbot#readme",
-  "description": "",
+  "type": "module",
   "dependencies": {
-    "@google/generative-ai": "^0.24.0",
-    "body-parser": "^2.2.0",
-    "dotenv": "^16.4.7",
-    "express": "^5.1.0",
-    "openai": "^4.91.0"
+    "@google/genai": "^0.7.0",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.2"
   }
 }
